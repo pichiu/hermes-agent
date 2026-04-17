@@ -2,7 +2,7 @@
 
 ## 一段話總結
 
-**Hermes Agent** 是由 Nous Research 開發的開源自我改進 AI agent（v0.8.0，2026-04-08）。它以「closed learning loop」為核心——從完成的任務中創建可重用的 skill 文件、在使用過程中改進技能、定期整理長期記憶——實現真正跨 session 的持續學習。可透過 Telegram、Discord、Slack、WhatsApp、Signal 等 14+ 平台存取，也可在 CLI 互動；後端執行環境從 $5 VPS 到 GPU cluster 到 serverless 均支援，空閒時近乎零成本。
+**Hermes Agent** 是由 Nous Research 開發的開源自我改進 AI agent（v0.10.0，2026-04-16）。它以「closed learning loop」為核心——從完成的任務中創建可重用的 skill 文件、在使用過程中改進技能、定期整理長期記憶——實現真正跨 session 的持續學習。可透過 Telegram、Discord、Slack、WhatsApp、Signal 等 16+ 平台存取，也可在 CLI 互動；後端執行環境從 $5 VPS 到 GPU cluster 到 serverless 均支援，空閒時近乎零成本。付費 Nous Portal 用戶可透過 **Tool Gateway** 使用 Web 搜尋、圖片生成、TTS、瀏覽器自動化，無需額外 API 金鑰。
 
 ---
 
@@ -73,6 +73,20 @@ hermes sessions browse     # 瀏覽歷史 session
 hermes cron list           # 查看排程任務
 hermes skills browse       # 瀏覽 skills hub
 hermes honcho setup        # 設置 Honcho 記憶整合
+
+# v0.9.0+ 新增
+hermes backup              # 備份設定、sessions、skills、memory
+hermes import              # 從備份還原
+hermes dump                # 輸出可分享的設定摘要
+hermes debug share         # 上傳 debug 報告到 pastebin
+hermes skills reset        # 重設 bundled skills（解卡用）
+/fast                      # 切換 Fast Mode（OpenAI/Anthropic 優先佇列）
+/compress <topic>          # 帶 focus topic 的 context 壓縮
+/debug                     # 快速診斷（所有平台可用）
+
+# v0.10.0+ 新增
+hermes memory reset        # 重設 memory
+hermes -Q                  # Quiet mode：只輸出純文字回應
 ```
 
 ---
@@ -82,6 +96,7 @@ hermes honcho setup        # 設置 Honcho 記憶整合
 | 文件 | 內容 |
 |------|------|
 | [INDEX.md](INDEX.md) | ← 你在這裡：專案總覽、技術棧、指令速查 |
+| [CHANGELOG.md](CHANGELOG.md) | 版本變更記錄（v0.8.0 → v0.9.0 → v0.10.0） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系統架構圖、元件清單、通訊模式、設計決策 |
 | [CODEBASE_MAP.md](CODEBASE_MAP.md) | 程式碼地圖、目錄說明、「我想改 X 看哪裡」速查 |
 | [DATA_MODEL.md](DATA_MODEL.md) | SQLite schema、Session/Message 資料結構、記憶模型 |
@@ -116,3 +131,8 @@ hermes honcho setup        # 設置 Honcho 記憶整合
 | **agentskills.io** | Skill 格式的開放標準，Hermes 相容此格式 |
 | **Auxiliary LLM** | 用於 side tasks（vision、compression、web_extract）的次要 LLM，通常比主模型便宜 |
 | **Prompt Caching** | Anthropic prefix cache 機制，系統提示快取以降低 75% 輸入 token 費用 |
+| **Tool Gateway** | Nous Portal 訂閱附帶的 managed tool 服務（web search、image gen、TTS、browser），無需個人 API key |
+| **Fast Mode** | `/fast` 切換的優先佇列模式，對 OpenAI 和 Anthropic 模型顯著降低延遲 |
+| **watch_patterns** | 背景 process 輸出監控的 pattern 設定，有匹配時即時通知（v0.9.0+）|
+| **Pluggable Context Engine** | 透過 plugin 替換 context 管理邏輯（filtering、summarization、injection）的插槽 |
+| **Blueprint（iMessage/WeChat/WeCom）** | v0.9.0 新增的 3 個平台：BlueBubbles iMessage、Weixin WeChat、WeCom Callback Mode |
