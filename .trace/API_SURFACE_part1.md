@@ -1,7 +1,7 @@
 # Hermes Agent API 與介面參考文件 — Part 1
 
 > **Part 2**: [API_SURFACE_part2.md](./API_SURFACE_part2.md)
-> 版本：v0.8.0 (v2026.4.8)　　來源：`hermes_cli/main.py`, `hermes_cli/commands.py`, `toolsets.py`, `tools/`, `run_agent.py`
+> 版本：v0.10.0 (v2026.4.16)　　來源：`hermes_cli/main.py`, `hermes_cli/commands.py`, `toolsets.py`, `tools/`, `run_agent.py`
 
 ---
 
@@ -68,8 +68,16 @@ flowchart TD
 | `hermes logout` | 清除已儲存的認證 | — |
 | `hermes status` | 顯示所有元件狀態 | — |
 | `hermes claw migrate` | OpenClaw → Hermes 遷移 | `--dry-run` |
+| `hermes backup` | 備份設定、sessions、skills、memory 至 tar 檔（v0.9.0+） | `[--quick]` |
+| `hermes import` | 從 backup tar 檔還原（v0.9.0+） | `<file>` |
+| `hermes dump` | 輸出可貼上的設定摘要供 debug 分享（v0.9.0+） | — |
+| `hermes debug share` | 上傳完整 debug 報告至 pastebin（v0.9.0+） | — |
+| `hermes skills reset` | 重設 bundled skills（解卡用，v0.10.0+） | — |
+| `hermes memory reset` | 清空 MEMORY.md（v0.10.0+） | — |
+| `hermes snapshot` | 建立快速 SQLite snapshot（v0.9.0+） | — |
 
 **Profile 支援**：所有子命令均接受 `-p/--profile <name>`，對應 `HERMES_HOME` 切換。
+**Quiet mode**：`hermes -Q`（或 `--quiet`）只輸出純回應文字，不顯示 UI 元素（v0.10.0+）。
 
 ---
 
@@ -89,7 +97,7 @@ flowchart TD
 | `/undo` | — | 移除上一組 user/assistant exchange | — | 全平台 |
 | `/title` | — | 設定 session 標題 | `[name]` | 全平台 |
 | `/branch` | `/fork` | 從當前 session 分支（探索不同路徑） | `[name]` | 全平台 |
-| `/compress` | — | 手動壓縮對話 context | — | 全平台 |
+| `/compress` | — | 手動壓縮對話 context；可加 focus topic：`/compress <topic>`（v0.9.0+） | `[topic]` | 全平台 |
 | `/rollback` | — | 列出或還原檔案系統 checkpoints | `[number]` | 全平台 |
 | `/stop` | — | 終止所有背景程序 | — | 全平台 |
 | `/approve` | — | 批准待處理的危險命令 | `[session\|always]` | Gateway only |
@@ -108,6 +116,7 @@ flowchart TD
 |------|------|------|------|---------|
 | `/config` | — | 顯示當前設定 | — | CLI only |
 | `/model` | — | 切換模型（本 session 或全局） | `[model] [--global]` | 全平台 |
+| `/fast` | — | 切換 Fast Mode（OpenAI Priority / Anthropic 優先佇列低延遲，v0.9.0+） | — | 全平台 |
 | `/provider` | — | 顯示可用 provider 和當前 provider | — | 全平台 |
 | `/prompt` | — | 查看/設定自訂系統提示 | `[text]`，subcommands: `clear` | CLI only |
 | `/personality` | — | 設定預定義個性 | `[name]` | 全平台 |
@@ -136,6 +145,7 @@ flowchart TD
 |------|------|------|------|---------|
 | `/commands` | — | 瀏覽所有命令和 skills（分頁） | `[page]` | Gateway only |
 | `/help` | — | 顯示可用命令 | — | 全平台 |
+| `/debug` | — | 快速診斷：顯示設定、provider、版本等摘要（v0.9.0+） | — | 全平台 |
 | `/usage` | — | 顯示本 session token 用量 | — | 全平台 |
 | `/insights` | — | 顯示使用量分析（多日） | `[days]` | 全平台 |
 | `/platforms` | `/gateway` | 顯示 gateway/訊息平台狀態 | — | CLI only |

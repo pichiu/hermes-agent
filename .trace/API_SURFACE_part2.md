@@ -1,7 +1,7 @@
 # Hermes Agent API 與介面參考文件 — Part 2
 
 > **Part 1**: [API_SURFACE_part1.md](./API_SURFACE_part1.md)（CLI 命令 + Slash Commands）
-> 版本：v0.8.0 (v2026.4.8)　　來源：`tools/`, `toolsets.py`, `run_agent.py`, `gateway/platforms/api_server.py`, `acp_adapter/server.py`
+> 版本：v0.10.0 (v2026.4.16)　　來源：`tools/`, `toolsets.py`, `run_agent.py`, `gateway/platforms/api_server.py`, `acp_adapter/server.py`
 
 ---
 

@@ -1,12 +1,12 @@
 # Hermes Agent — 系統架構文件
 
-> 版本：v0.8.0 (v2026.4.8)　｜　由 Nous Research 開發　｜　MIT License
+> 版本：v0.10.0 (v2026.4.16)　｜　由 Nous Research 開發　｜　MIT License
 
 ---
 
 ## 1. 高層架構概覽
 
-Hermes Agent 是一個 **Closed-Loop 自我改進 AI Agent**，採用 monolith 主體搭配 plugin 擴充的架構。核心為 `AIAgent` 類別（`run_agent.py`），透過 ReAct 工具呼叫迴圈驅動執行；外層由多平台 Gateway 接收訊息；Tool Registry singleton 管理所有工具；Hook-based Plugin 系統提供擴充點；並透過 Closed Learning Loop 實現跨 session 自我改進。
+Hermes Agent 是一個 **Closed-Loop 自我改進 AI Agent**，採用 monolith 主體搭配 plugin 擴充的架構。核心為 `AIAgent` 類別（`run_agent.py`），透過 ReAct 工具呼叫迴圈驅動執行；外層由多平台 Gateway（16 個平台）接收訊息；Tool Registry singleton 管理所有工具；Hook-based Plugin 系統提供擴充點；並透過 Closed Learning Loop 實現跨 session 自我改進。v0.9.0 新增 Web Dashboard；v0.10.0 引入 Nous Tool Gateway（Portal 訂閱的 managed tool service）。
 
 ```mermaid
 graph TD
@@ -23,7 +23,7 @@ graph TD
         SL["Slack\ngateway/platforms/slack.py"]
         WA["WhatsApp\ngateway/platforms/whatsapp.py"]
         SIG["Signal\ngateway/platforms/signal.py"]
-        ETC["Email / Matrix /\nMattermost / DingTalk..."]
+        ETC["Email / Matrix / Mattermost /\nDingTalk / iMessage / WeChat /\nWeCom / SMS / Webhook..."]
     end
 
     subgraph 核心執行層 Core
@@ -101,6 +101,8 @@ graph TD
 | **Plugin System** | Hook-based 擴充、MemoryProvider 注冊 | `hermes_cli/plugins.py` | AIAgent / CLI | Hook callbacks, custom tools |
 | **SessionDB** | SQLite FTS5 對話持久化 | `hermes_state.py` | AIAgent / HermesCLI | SQLite |
 | **ACP Server** | VS Code / Zed / JetBrains 整合 | `acp_adapter/` | hermes-acp CLI | AIAgent |
+| **Web Dashboard** | 瀏覽器管理介面（設定/session/skills/gateway）| `gateway/platforms/api_server.py` + 前端 | Gateway | REST API |
+| **Tool Gateway** | Nous Portal 訂閱 managed tool service（Web 搜尋/圖片/TTS/瀏覽器）| `tools/managed_tool_gateway.py` | ToolRegistry | Nous Portal API |
 
 ---
 

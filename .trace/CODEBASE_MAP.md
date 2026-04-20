@@ -141,12 +141,14 @@ hermes-agent/
 │       ├── whatsapp.py      WhatsApp（Node.js bridge）
 │       ├── signal.py        Signal（signal-cli HTTP）
 │       ├── email.py         Email（IMAP + SMTP）
-│       ├── matrix.py        Matrix（matrix-nio）
+│       ├── matrix.py        Matrix（mautrix-python，v0.9.0 從 matrix-nio 遷移）
 │       ├── mattermost.py    Mattermost（REST + WebSocket）
 │       ├── homeassistant.py  Home Assistant
 │       ├── dingtalk.py      DingTalk
 │       ├── feishu.py        Feishu/Lark
-│       ├── wecom.py         WeCom
+│       ├── wecom.py         WeCom（含 Callback Mode，v0.9.0）
+│       ├── weixin.py        WeChat（Weixin，v0.9.0 新增）
+│       ├── bluebubbles.py   iMessage via BlueBubbles（v0.9.0 新增）
 │       ├── sms.py           SMS
 │       ├── webhook.py       Generic webhook
 │       ├── api_server.py    REST API server

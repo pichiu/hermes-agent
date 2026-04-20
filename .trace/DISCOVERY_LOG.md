@@ -1,6 +1,6 @@
 # DISCOVERY_LOG.md — Hermes Agent 探索紀錄與待解問題
 
-> 撰寫日期：2026-04-09 ｜ 版本：v0.8.0 (v2026.4.8)
+> 撰寫日期：2026-04-09 ｜ 最後更新：2026-04-20 ｜ 版本：v0.10.0 (v2026.4.16)
 > 本文件記錄 trace 過程中的發現、落差、技術債與待解疑問
 
 ---
@@ -33,6 +33,8 @@
 
 | 版本 | 發佈日期 | 重要特性 |
 |------|----------|---------|
+| v0.10.0 (v2026.4.16) | 2026-04-16 | **Nous Tool Gateway**（Portal 訂閱附帶 Web 搜尋/圖片生成/TTS/瀏覽器）、Dashboard 主題與插件系統、Claude Opus 4.7、xAI Responses API、Ollama Cloud、Quiet mode（-Q）|
+| v0.9.0 (v2026.4.13) | 2026-04-13 | iMessage（BlueBubbles）/ WeChat / WeCom 三平台（共 16 個）、Fast Mode（`/fast`）、Web Dashboard、Termux/Android、`watch_patterns`、`hermes backup/import`、xAI/MiMo 原生 provider、深度安全加固 |
 | v0.8.0 (v2026.4.8) | 2026-04-08 | Background task 自動通知、Google AI Studio native 支援、MCP OAuth 2.1 PKCE、Matrix 升為 tier-1 平台 |
 | v0.7.0 (v2026.4.3) | 2026-04-03 | SQLite + FTS5 session 全文搜尋、learning loop 完善、skill creation loop 閉合 |
 | v0.6.0 | 2026-03 末 | MCP support、typed SDK workflows |
@@ -153,12 +155,11 @@ quadrantChart
 - **位置**：`tinker-atropos/`, `.gitmodules`
 - ⚠️ atroposlib 以 git dependency 方式安裝（非 PyPI），版本管理相對脆弱
 
-### 5.4 `matrix-nio[e2e]` 安裝複雜度
+### 5.4 Matrix E2EE 函式庫（已解決 v0.9.0）
 
-- **問題**：Matrix E2E 加密需要 `libolm` 原生函式庫，在部分 Linux 發行版上安裝困難
-- **影響**：Matrix 在 v0.8.0 升為 tier-1 平台，但 E2E 加密依賴的安裝障礙仍存在
+- **原問題**：Matrix E2E 加密需要 `libolm` 原生函式庫（`matrix-nio[e2e]`），在部分 Linux 發行版上安裝困難
+- ✅ **v0.9.0 解決**：`gateway/platforms/matrix.py` 已從 `matrix-nio` 遷移至 `mautrix-python`，E2EE 改用 SQLite crypto store（不再依賴 `libolm`），同時修復了 E2EE 解密問題（PR #7981, #8282）
 - **位置**：`gateway/platforms/matrix.py`，`pyproject.toml` optional deps
-- ✅ 已有 `hermes doctor` 可診斷，但修復需用戶手動安裝系統套件
 
 ---
 
