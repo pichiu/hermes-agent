@@ -566,4 +566,31 @@ agent 呼叫判定危險的工具前，會暫停並等待使用者審核：
 
 ---
 
+---
+
+## API 介面層次圖
+
+```mermaid
+graph LR
+    A[用戶] -->|hermes CLI| B[HermesCLI\ncli.py]
+    A -->|Telegram/Discord/...| C[GatewayRunner\ngateway/run.py]
+    A -->|VS Code/Zed| D[ACP Server\nacp_adapter/]
+    A -->|Python import| E[AIAgent\nrun_agent.py]
+    A -->|HTTP POST| F[OpenAI API Server\ngateway/platforms/api_server.py]
+
+    B --> E
+    C --> E
+    D --> E
+    F --> E
+
+    E -->|dispatch| G[Tool Registry\ntools/registry.py]
+    G --> H[terminal]
+    G --> I[web_search]
+    G --> J[browser_navigate]
+    G --> K[skill_manage]
+    G --> L[delegate_task]
+    G --> M[memory]
+    G --> N[MCP tools]
+```
+
 *文件生成日期：2026-05-05 | 資料來源：hermes_cli/commands.py、run_agent.py、gateway/platforms/api_server.py、tools/*.py*

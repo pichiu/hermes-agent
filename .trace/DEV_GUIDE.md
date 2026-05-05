@@ -185,16 +185,7 @@ workers 數量超過 4 會出現 CI 從未見過的 ordering flake。
 
 ### 3.5 測試撰寫規範
 
-**禁止撰寫 change-detector tests**——即當可預期的資料（模型清單、config 版本號、枚舉計數）更新時就會失敗的測試：
-
-```python
-# 錯誤：catalog snapshot，每次模型發布就壞掉
-assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]
-
-# 正確：測試行為，不測試快照
-assert "gemini" in _PROVIDER_MODELS
-assert len(_PROVIDER_MODELS["gemini"]) >= 1
-```
+**禁止撰寫 change-detector tests**——即當可預期的資料（模型清單、config 版本號、枚舉計數）更新時就會失敗的測試。測試行為，不測試快照：用 `assert "gemini" in _PROVIDER_MODELS` 而非 `assert "gemini-2.5-pro" in _PROVIDER_MODELS["gemini"]`。
 
 ---
 
@@ -235,10 +226,10 @@ HERMES_DUMP_REQUESTS=1 hermes chat -q "test"
 
 ### 4.4 其他偵錯技巧
 
-- **Context 壓縮問題**：設定 `compression.enabled: false` 在 `config.yaml` 暫時停用壓縮
-- **工具未被呼叫**：確認 toolset 已在 config 中啟用；使用 `hermes tools` 列出已啟用工具
-- **MCP 連線問題**：用 `hermes mcp status` 確認 server 狀態
-- **子代理（delegate）問題**：`_last_resolved_tool_names` 是 `model_tools.py` 中的 process-global，子代理執行期間可能暫時 stale
+- Context 壓縮問題：在 `config.yaml` 設定 `compression.enabled: false` 暫時停用
+- 工具未被呼叫：確認 toolset 已在 config 中啟用，用 `hermes tools` 列出已啟用工具
+- MCP 連線問題：用 `hermes mcp status` 確認 server 狀態
+- 子代理問題：`_last_resolved_tool_names`（`model_tools.py`）在子代理執行期間暫時 stale，詳見 Known Pitfalls 5.4
 
 ---
 
@@ -353,10 +344,9 @@ def profile_env(tmp_path, monkeypatch):
 
 ### 6.3 PR 慣例
 
-- 確保分支已同步最新 `main`（避免 stale squash merge 問題）
-- 推送前執行完整測試套件：`scripts/run_tests.sh`
-- PR 標題清楚描述變更類型（fix / feat / refactor / docs）
-- 新增工具需確認在 `toolsets.py` 中有對應 toolset 定義
+- 推送前確認分支已同步最新 `main`（避免 stale squash merge 問題，見 Known Pitfalls 5.7）
+- 推送前跑完整測試套件：`scripts/run_tests.sh`
+- PR 標題清楚說明變更類型（fix / feat / refactor / docs）
 
 ### 6.4 CI Checks
 
@@ -412,10 +402,7 @@ hermes -p work gateway start
 
 ### 7.4 撰寫 Profile-Safe 程式碼
 
-- 程式碼路徑使用 `get_hermes_home()`（從 `hermes_constants` import）
-- 用戶訊息使用 `display_hermes_home()`
-- 測試中 mock `Path.home()` 時也需同步設定 `HERMES_HOME` env var
-- Gateway platform adapter 應使用 token lock（`acquire_scoped_lock()`），避免兩個 profile 使用相同憑證
+程式碼中的路徑使用 `get_hermes_home()`（從 `hermes_constants` import），用戶訊息使用 `display_hermes_home()`。測試中 mock `Path.home()` 時也需同步設定 `HERMES_HOME` env var。Gateway platform adapter 應使用 `acquire_scoped_lock()`，避免兩個 profile 使用相同憑證。
 
 ---
 
@@ -463,24 +450,9 @@ registry.register(
 
 ### 8.2 新增設定（Configuration）
 
-**config.yaml 選項：**
-1. 在 `hermes_cli/config.py` 的 `DEFAULT_CONFIG` 中加入新 key
-2. 僅在需要 migrate/transform 既有設定時才 bump `_config_version`；單純新增 key 不需 bump
-
-**env 變數（secrets only）：**
-在 `hermes_cli/config.py` 的 `OPTIONAL_ENV_VARS` 中加入 metadata：
-
-```python
-"NEW_API_KEY": {
-    "description": "What it's for",
-    "prompt": "Display name",
-    "url": "https://...",
-    "password": True,
-    "category": "tool",  # provider, tool, messaging, setting
-},
-```
-
-非 secret 設定（timeout、threshold、feature flag）應放 config.yaml，不放 `.env`。
+- **config.yaml 選項**：在 `hermes_cli/config.py` 的 `DEFAULT_CONFIG` 加入新 key；只有需要 rename/restructure 既有設定時才 bump `_config_version`，單純新增 key 不需要
+- **env 變數（secrets only）**：在 `OPTIONAL_ENV_VARS`（`hermes_cli/config.py`）加入 metadata，欄位包含 `description`、`prompt`、`url`、`password`、`category`
+- 非 secret 設定（timeout、threshold、feature flag）放 config.yaml，不放 `.env`
 
 ### 8.3 新增斜線指令（Slash Command）
 
@@ -527,30 +499,7 @@ def setup(ctx):
 
 ### 8.5 新增技能（Skill）
 
-技能為 Markdown 檔案，放入 `skills/<category>/` 或 `optional-skills/<category>/`。
-
-每個技能需有 `SKILL.md` frontmatter：
-
-```markdown
----
-name: my-skill
-description: What this skill does
-version: "1.0"
-platforms: [linux, macos]
-metadata:
-  hermes:
-    tags: [productivity, research]
-    category: productivity
-    config:
-      MY_SETTING: "default value"
----
-
-# 技能內容（指令說明、工具使用方式等）
-```
-
-技能 PR 審查時，需確認放置於正確目錄：
-- 廣泛適用 → `skills/`
-- 有重型依賴或付費服務 → `optional-skills/`
+技能為 Markdown 檔案，放入 `skills/<category>/`（廣泛適用）或 `optional-skills/<category>/`（重型依賴或付費服務）。每個技能需有 `SKILL.md` frontmatter，標準欄位包含 `name`、`description`、`version`、`platforms`（OS gating）、`metadata.hermes.tags`、`metadata.hermes.category`、`metadata.hermes.config`（所需的 config.yaml 設定）。
 
 ### 8.6 新增閘道平台（Gateway Platform）
 
@@ -576,3 +525,28 @@ metadata:
 | 測試腳本 | `/home/user/hermes-agent/scripts/run_tests.sh` |
 | CI 配置 | `/home/user/hermes-agent/.github/workflows/tests.yml` |
 | Nous Research Discord | https://discord.gg/NousResearch |
+
+---
+
+## 開發工作流程圖
+
+```mermaid
+graph TD
+    A[fork/clone repo] --> B[./setup-hermes.sh]
+    B --> C[hermes setup]
+    C --> D{開始開發}
+
+    D -->|新工具| E[tools/my_tool.py\nregistry.register]
+    D -->|新斜線指令| F[hermes_cli/commands.py\n+ cli.py handler]
+    D -->|新平台| G[gateway/platforms/my.py\nBasePlatformAdapter]
+    D -->|新技能| H[skills/category/SKILL.md]
+
+    E --> I[scripts/run_tests.sh]
+    F --> I
+    G --> I
+    H --> I
+
+    I -->|通過| J[git commit + push PR]
+    I -->|失敗| K[hermes logs / doctor\n修復後重試]
+    K --> I
+```

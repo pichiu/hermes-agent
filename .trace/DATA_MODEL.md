@@ -280,22 +280,20 @@ metadata:
 ```json
 {
   "dogfood": {
-    "created_by": "agent",        // "agent" | null（手動建立）
-    "use_count": 12,              // 被 agent 主動使用次數
-    "view_count": 3,              // 被 skill_view 工具查閱次數
-    "patch_count": 2,             // 被 skill_manage 修補次數
+    "created_by": "agent",
+    "use_count": 12, "view_count": 3, "patch_count": 2,
     "last_used_at": "2026-04-10T08:30:00+00:00",
     "last_viewed_at": "2026-04-15T12:00:00+00:00",
     "last_patched_at": "2026-03-20T09:00:00+00:00",
     "created_at": "2026-01-15T10:00:00+00:00",
-    "state": "active",            // "active" | "stale" | "archived"
-    "pinned": false,              // true = 豁免所有自動狀態轉換
-    "archived_at": null           // 歸檔時間戳
+    "state": "active",
+    "pinned": false,
+    "archived_at": null
   }
 }
 ```
 
-**原子寫入機制**：`tempfile.mkstemp` + `os.replace`，確保並發寫入安全。
+**原子寫入**：`tempfile.mkstemp` + `os.replace`，並發安全。
 
 ### 6.3 Skill 目錄結構
 
@@ -421,15 +419,9 @@ metadata:
 - 永不自動刪除，只歸檔（移至 `.archive/`）
 - `review_agent._skill_nudge_interval = 0`，防止回顧 agent 遞迴觸發自身回顧
 
-### 8.3 技能 Readiness 狀態
+### 8.3 技能 Readiness 狀態（執行時，`tools/skills_tool.py`）
 
-技能還有一個執行時評估的 `SkillReadinessStatus`（`tools/skills_tool.py`）：
-
-| 狀態 | 說明 |
-|------|------|
-| `AVAILABLE` | 技能可用，所有依賴滿足 |
-| `SETUP_NEEDED` | 需要額外設定（如 API key） |
-| `UNSUPPORTED` | 當前平台不支援（`platforms` 限制） |
+`AVAILABLE`（可用）/ `SETUP_NEEDED`（需設定，如缺少 API key）/ `UNSUPPORTED`（`platforms` 限制不符）
 
 ---
 
