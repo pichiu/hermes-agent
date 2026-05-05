@@ -8134,6 +8134,7 @@ def cmd_dashboard(args):
         open_browser=not args.no_open,
         allow_public=getattr(args, "insecure", False),
         embedded_chat=embedded_chat,
+        password=getattr(args, "password", ""),
     )
 
 
@@ -10259,6 +10260,16 @@ Examples:
         "--insecure",
         action="store_true",
         help="Allow binding to non-localhost (DANGEROUS: exposes API keys on the network)",
+    )
+    dashboard_parser.add_argument(
+        "--password",
+        default="",
+        metavar="PASSWORD",
+        help=(
+            "Require this password to access the dashboard. "
+            "Also accepted via the HERMES_DASHBOARD_PASSWORD environment variable. "
+            "Strongly recommended when using --insecure."
+        ),
     )
     dashboard_parser.add_argument(
         "--tui",

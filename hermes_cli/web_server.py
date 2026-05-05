@@ -50,9 +50,9 @@ from hermes_cli.config import (
 from gateway.status import get_running_pid, read_runtime_status
 
 try:
-    from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+    from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
 except ImportError:
@@ -73,6 +73,43 @@ app = FastAPI(title="Hermes Agent", version=__version__)
 # ---------------------------------------------------------------------------
 _SESSION_TOKEN = secrets.token_urlsafe(32)
 _SESSION_HEADER_NAME = "X-Hermes-Session-Token"
+
+# ---------------------------------------------------------------------------
+# Optional password protection.
+# Set via HERMES_DASHBOARD_PASSWORD env-var or start_server(password=...).
+# When set, unauthenticated browsers are redirected to /login before the
+# session token is revealed, so the API remains inaccessible without a valid
+# login.  An empty string means no password is required (default behaviour).
+# ---------------------------------------------------------------------------
+_DASHBOARD_PASSWORD: str = ""
+
+# Active password sessions: {cookie_value: expiry_unix_timestamp}
+_PASSWORD_SESSIONS: dict = {}
+_PASSWORD_SESSION_MAX_AGE = 86400 * 7   # 7 days
+_PASSWORD_COOKIE = "hermes_dash_session"
+
+
+def _check_password_session(request: "Request") -> bool:
+    """Return True if the request carries a valid password-auth session cookie."""
+    if not _DASHBOARD_PASSWORD:
+        return True
+    cookie = request.cookies.get(_PASSWORD_COOKIE, "")
+    if not cookie:
+        return False
+    expiry = _PASSWORD_SESSIONS.get(cookie, 0.0)
+    return time.time() < expiry
+
+
+def _create_password_session() -> str:
+    token = secrets.token_urlsafe(32)
+    _PASSWORD_SESSIONS[token] = time.time() + _PASSWORD_SESSION_MAX_AGE
+    # Prune expired entries to avoid unbounded growth.
+    now = time.time()
+    expired = [k for k, v in _PASSWORD_SESSIONS.items() if v < now]
+    for k in expired:
+        _PASSWORD_SESSIONS.pop(k, None)
+    return token
+
 
 # In-browser Chat tab (/chat, /api/pty, …).  Off unless ``hermes dashboard --tui``
 # or HERMES_DASHBOARD_TUI=1.  Set from :func:`start_server`.
@@ -107,6 +144,8 @@ _PUBLIC_API_PATHS: frozenset = frozenset({
     "/api/dashboard/themes",
     "/api/dashboard/plugins",
     "/api/dashboard/plugins/rescan",
+    "/api/login",
+    "/api/logout",
 })
 
 
@@ -3205,6 +3244,109 @@ async def events_ws(ws: WebSocket) -> None:
                     _event_channels.pop(channel, None)
 
 
+_LOGIN_PAGE_HTML = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Hermes — Login</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:12px;
+        padding:2rem 2.5rem;width:100%;max-width:360px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  h1{font-size:1.4rem;font-weight:600;margin-bottom:1.5rem;text-align:center;
+     color:#58a6ff;letter-spacing:.02em}
+  label{display:block;font-size:.85rem;color:#8b949e;margin-bottom:.4rem}
+  input[type=password]{width:100%;padding:.6rem .75rem;background:#0d1117;
+     border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:1rem;
+     outline:none;transition:border-color .15s}
+  input[type=password]:focus{border-color:#58a6ff}
+  button{width:100%;margin-top:1.2rem;padding:.65rem;background:#238636;
+     border:none;border-radius:6px;color:#fff;font-size:1rem;font-weight:500;
+     cursor:pointer;transition:background .15s}
+  button:hover{background:#2ea043}
+  .err{margin-top:.9rem;padding:.5rem .75rem;background:#2d1215;
+       border:1px solid #f85149;border-radius:6px;font-size:.85rem;
+       color:#f85149;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Hermes Dashboard</h1>
+  <label for="pw">Password</label>
+  <input id="pw" type="password" autofocus autocomplete="current-password"
+         placeholder="Enter dashboard password"/>
+  <div class="err" id="err">Incorrect password.</div>
+  <button id="btn">Sign in</button>
+</div>
+<script>
+  async function login(){
+    const pw=document.getElementById('pw').value;
+    const err=document.getElementById('err');
+    err.style.display='none';
+    try{
+      const r=await fetch('/api/login',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({password:pw})});
+      if(r.ok){const p=new URLSearchParams(location.search);
+               location.href=p.get('next')||'/';}
+      else{err.style.display='block';}
+    }catch(e){err.textContent='Network error — is the server running?';
+              err.style.display='block';}
+  }
+  document.getElementById('btn').onclick=login;
+  document.getElementById('pw').onkeydown=e=>{if(e.key==='Enter')login();};
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/login")
+async def login_page(request: "Request"):
+    """Serve the password login page."""
+    if _check_password_session(request):
+        return RedirectResponse("/", status_code=302)
+    return HTMLResponse(_LOGIN_PAGE_HTML, headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/login")
+async def api_login(request: "Request", response: "Response"):
+    """Validate the dashboard password and set a session cookie."""
+    if not _DASHBOARD_PASSWORD:
+        return JSONResponse({"ok": True, "note": "no password set"})
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    password = body.get("password", "")
+    if not hmac.compare_digest(
+        password.encode("utf-8"),
+        _DASHBOARD_PASSWORD.encode("utf-8"),
+    ):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    token = _create_password_session()
+    response.set_cookie(
+        _PASSWORD_COOKIE,
+        token,
+        httponly=True,
+        max_age=_PASSWORD_SESSION_MAX_AGE,
+        samesite="strict",
+        secure=False,   # dashboard is HTTP-only (localhost)
+    )
+    return {"ok": True}
+
+
+@app.post("/api/logout")
+async def api_logout(response: "Response"):
+    """Clear the password session cookie."""
+    response.delete_cookie(_PASSWORD_COOKIE, samesite="strict")
+    return {"ok": True}
+
+
 def mount_spa(application: FastAPI):
     """Mount the built SPA. Falls back to index.html for client-side routing.
 
@@ -3240,7 +3382,11 @@ def mount_spa(application: FastAPI):
     application.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
     @application.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
+    async def serve_spa(full_path: str, request: "Request"):
+        # Password gate: redirect unauthenticated browsers to /login.
+        if _DASHBOARD_PASSWORD and not _check_password_session(request):
+            next_url = urllib.parse.quote(request.url.path or "/")
+            return RedirectResponse(f"/login?next={next_url}", status_code=302)
         file_path = WEB_DIST / full_path
         # Prevent path traversal via url-encoded sequences (%2e%2e/)
         if (
@@ -4022,12 +4168,14 @@ def start_server(
     allow_public: bool = False,
     *,
     embedded_chat: bool = False,
+    password: str = "",
 ):
     """Start the web UI server."""
     import uvicorn
 
-    global _DASHBOARD_EMBEDDED_CHAT_ENABLED
+    global _DASHBOARD_EMBEDDED_CHAT_ENABLED, _DASHBOARD_PASSWORD
     _DASHBOARD_EMBEDDED_CHAT_ENABLED = embedded_chat
+    _DASHBOARD_PASSWORD = password or os.environ.get("HERMES_DASHBOARD_PASSWORD", "")
 
     _LOCALHOST = ("127.0.0.1", "localhost", "::1")
     if host not in _LOCALHOST and not allow_public:
@@ -4059,4 +4207,6 @@ def start_server(
         threading.Thread(target=_open, daemon=True).start()
 
     print(f"  Hermes Web UI → http://{host}:{port}")
+    if _DASHBOARD_PASSWORD:
+        print("  Password protection enabled (HERMES_DASHBOARD_PASSWORD / --password)")
     uvicorn.run(app, host=host, port=port, log_level="warning")
