@@ -56,11 +56,13 @@ hermes-agent/
 │   ├── anthropic_adapter.py  # Anthropic 原生 API 轉接器
 │   ├── bedrock_adapter.py    # AWS Bedrock 轉接器
 │   ├── gemini_native_adapter.py # Gemini 原生 API
-│   ├── redact.py             # 日誌 secrets 遮蔽
+│   ├── redact.py             # 日誌 secrets 遮蔽（v0.13 起預設開啟）
 │   ├── tool_guardrails.py    # 工具迴圈護衛（防止無限循環）
 │   ├── image_gen_provider.py # ImageGenProvider ABC
 │   ├── image_routing.py      # 圖片生成路由（fal.ai 等）
 │   ├── insights.py           # 會話 insights 分析（/insights）
+│   ├── i18n.py               # [v0.13] 靜態訊息 i18n（從 locales/*.yaml 載入）
+│   ├── think_scrubber.py     # [v0.13] StreamingThinkScrubber — 即時剝除 <think> tag
 │   └── transports/           # 自訂 HTTP 傳輸層（timeout、stale 偵測）
 │
 ├── tools/                    # 工具實作（auto-discovered via registry.py）
@@ -79,7 +81,7 @@ hermes-agent/
 │   ├── kanban_tools.py       # Kanban 多代理協調
 │   ├── cronjob_tools.py      # cronjob — 排程管理
 │   ├── send_message_tool.py  # send_message — 跨平台訊息
-│   ├── vision_tools.py       # vision_analyze 工具
+│   ├── vision_tools.py       # vision_analyze + [v0.13] video_analyze 工具
 │   ├── image_generation_tool.py # image_generate 工具
 │   ├── todo_tool.py          # todo 工具（任務清單）
 │   ├── session_search_tool.py# session_search — FTS5 搜尋
@@ -110,6 +112,9 @@ hermes-agent/
 │   ├── setup.py              # hermes setup 精靈
 │   ├── gateway.py            # gateway 子指令實作
 │   ├── auth.py               # OAuth 認證（Nous Portal、GitHub Copilot）
+│   ├── checkpoints.py        # [v0.13] Checkpoints v2 — 會話狀態存檔管理
+│   ├── kanban_specify.py     # [v0.13] Kanban specify — auxiliary LLM 細化任務
+│   ├── kanban_diagnostics.py # [v0.13] Kanban 任務困境信號診斷引擎
 │   └── timeouts.py           # 提供商 timeout 設定解析
 │
 ├── gateway/                  # 訊息閘道
@@ -134,6 +139,16 @@ hermes-agent/
 │       ├── webhook.py        # 通用 Webhook
 │       └── ...               # 其他 10+ 平台
 │
+├── providers/                # [v0.13] Provider 抽象層
+│   ├── base.py               # ProviderProfile ABC — 宣告式 inference provider 描述
+│   └── __init__.py           # register_provider() + _discover_providers() 懶惰掃描
+│
+├── locales/                  # [v0.13] i18n 靜態訊息目錄
+│   ├── en.yaml               # 英文（source of truth）
+│   ├── zh.yaml               # 中文
+│   ├── ja.yaml / de.yaml / es.yaml / fr.yaml / tr.yaml / uk.yaml
+│   └── ...                   # 僅涵蓋 user-facing static messages（不翻譯 agent 輸出）
+│
 ├── plugins/                  # 插件系統
 │   ├── memory/               # 記憶後端插件
 │   │   ├── honcho/           # Honcho 辯證推理
@@ -141,8 +156,20 @@ hermes-agent/
 │   │   └── ...               # 其他記憶提供者
 │   ├── context_engine/       # 上下文引擎插件
 │   ├── image_gen/            # 圖片生成插件
-│   ├── kanban/               # Kanban 看板插件
-│   └── ...                   # 其他功能插件
+│   ├── kanban/               # Kanban 看板插件（dashboard + worker）
+│   ├── model-providers/      # [v0.13] LLM 提供商插件（29 個，每個含 plugin.yaml + __init__.py）
+│   │   ├── anthropic/        # Anthropic (Claude)
+│   │   ├── openrouter/       # OpenRouter
+│   │   ├── gemini/           # Google Gemini
+│   │   ├── bedrock/          # AWS Bedrock
+│   │   ├── deepseek/         # DeepSeek
+│   │   ├── ollama-cloud/     # Ollama
+│   │   └── ...               # 另外 23 個提供商
+│   ├── platforms/            # [v0.13] 平台插件（plugin 型，非 built-in）
+│   │   ├── google_chat/      # Google Chat（第 20 個平台，純插件型）
+│   │   ├── irc/              # IRC（已遷移至插件 hook 機制）
+│   │   └── teams/            # Microsoft Teams（已遷移至插件 hook 機制）
+│   └── ...                   # observability, disk-cleanup, 其他功能插件
 │
 ├── skills/                   # 內建技能（按分類，預設可用）
 │   ├── github/               # GitHub 工作流程技能
@@ -155,7 +182,10 @@ hermes-agent/
 │   ├── autonomous-ai-agents/ # 自主 AI 代理技能
 │   ├── devops/               # DevOps 技能
 │   ├── security/             # 安全技能
-│   └── ...                   # 15 分類
+│   ├── finance/              # [v0.13] 金融技能（3-statement-model, DCF, LBO, comps, merger, pptx）
+│   ├── research/             # [v0.13] 研究技能（searxng-search）
+│   ├── productivity/         # [v0.13] 生產力技能（shop-app）
+│   └── ...                   # 其他分類
 │
 ├── acp_adapter/              # ACP 伺服器（IDE 整合）
 │   ├── entry.py              # main() 進入點
@@ -191,7 +221,8 @@ hermes-agent/
 |-----------|--------|---------|
 | 新增一個 AI 工具 | `tools/` | `tools/registry.py` + 新增 `tools/my_tool.py` |
 | 修改斜線指令 | `hermes_cli/commands.py` + `cli.py` | `COMMAND_REGISTRY`, `process_command()` |
-| 新增訊息平台 | `gateway/platforms/` | `base.py`, `platform_registry.py`, `ADDING_A_PLATFORM.md` |
+| 新增訊息平台 | `gateway/platforms/` 或 `plugins/platforms/` | `base.py`, `platform_registry.py`, `ADDING_A_PLATFORM.md` |
+| 新增 LLM 提供商 | `plugins/model-providers/<name>/` | `providers/base.py:ProviderProfile`, `plugin.yaml` |
 | 修改系統提示 | `agent/prompt_builder.py` | `DEFAULT_AGENT_IDENTITY`, `build_*` 函式 |
 | 調整對話迴路 | `run_agent.py` | `run_conversation()` @ ~line 10432 |
 | 修改 CLI 外觀 | `agent/display.py`, `hermes_cli/skin_engine.py` | `KawaiiSpinner`, `_BUILTIN_SKINS` |
@@ -243,9 +274,16 @@ graph TD
 
     D --> S[gateway/platforms/*]
 
+    G --> T[agent/think_scrubber.py]
+    G --> U[tools/checkpoint_manager.py]
+
+    V[providers/__init__.py] -->|lazy scan| W[plugins/model-providers/*]
+    G --> V
+
     style G fill:#FFD700,stroke:#333
     style H fill:#FFA500,stroke:#333
     style L fill:#90EE90,stroke:#333
+    style V fill:#ADD8E6,stroke:#333
 ```
 
 ---
