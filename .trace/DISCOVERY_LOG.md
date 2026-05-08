@@ -212,3 +212,41 @@
 | RetainDB「⚠️ 未驗證」 | 已確認實作 | `plugins/memory/retaindb/`、`agent/redact.py:99` |
 | ByteRover「⚠️ 未驗證」 | 已確認實作 | `plugins/memory/byterover/`、`agent/redact.py:102` |
 | Tavily 搜尋「⚠️ 未驗證是否實作」 | 已確認完整實作 | `tools/web_tools.py:322-341` |
+
+---
+
+<!-- 以下段落更新於 2026-05-08, commit range: 601e5f1..faa13e49, v0.12→v0.13 -->
+
+## v0.13.0 增量更新發現（2026-05-08）
+
+### 重大架構決策（v0.13 新增）
+
+**D-01：ProviderProfile 的雙重 Discovery 系統設計**
+`ProviderProfile` 由 `providers._discover_providers()` 懶惰載入，與 PluginManager 完全分離。這個決策的核心原因是「避免雙重實例化」— 若 PluginManager 也 import model-provider plugins，每個 `ProviderProfile` 會被初始化兩次，可能觸發重複 API call（如 `fetch_models()`）。新增 model-provider plugin 時要注意這個差異：`plugin.yaml` 的 `kind: model-provider` 僅供 PluginManager 記錄，不觸發 import。
+
+**D-02：`env_enablement_fn` 平台 hook 的意涵**
+IRC 和 Teams 從 built-in `gateway/platforms/` 遷移至 `plugins/platforms/` 後，使用 `env_enablement_fn` hook 決定是否啟動平台。這代表「需要特殊環境設定的平台」未來都應透過插件機制，而非修改 `gateway/run.py` 核心。Google Chat 是第一個從一開始就是插件型的平台，其他新平台預計跟進。
+
+### 新的文件/程式碼落差（v0.13 新增）
+
+**G-10：Checkpoints v2 的恢復語意未說明**
+`hermes_cli/checkpoints.py` 提供了快照管理，但恢復語意（覆蓋 vs 分支、部分恢復、在 gateway 模式下的行為）在文件中未說明。`/rollback` 指令的完整語意也未在任何文件中描述。
+
+**G-11：`transform_llm_output` hook 的副作用邊界**
+新的 `transform_llm_output` plugin hook 允許插件在 LLM 輸出進入對話前改寫，但官方文件未說明輸出長度、格式（是否可以是 non-JSON）、回傳 None 的行為，以及是否可以拋出例外中斷對話。
+
+**G-12：i18n locale 覆蓋率**
+`locales/en.yaml` 的 `approval` 段落僅涵蓋 approval prompt 和少量 gateway 指令回覆。哪些訊息被翻譯、哪些留英文，未在任何地方有完整列表。`tests/agent/test_i18n.py` 強制所有 locale 需要 catalog parity，但沒有說明「可以安全添加 locale 的訊息範圍」。
+
+### 待驗證問題（v0.13 新增）
+
+10. **`StreamingThinkScrubber` 的 flush 語意**：`think_scrubber.flush()` 在串流結束時被呼叫（`run_agent.py:6816`），flush 的輸出會被丟棄還是附加到回應中？⚠️ 未驗證
+11. **Checkpoints v2 與 git worktree 的關係**：v0.12 的 checkpoint 使用 shadow git repo，v0.13 release notes 說「no more orphan shadow repos」，新機制是純檔案 snapshot 嗎？⚠️ 未驗證
+12. **Google Chat OAuth 流程**：`plugins/platforms/google_chat/oauth.py` 存在，但 OAuth app 設定流程（GCP 專案、Workspace 授權、webhook URL）未在核心文件中說明。⚠️ 未驗證
+
+### 已由 v0.13 關閉的問題
+
+- G-04（DM Pairing 機制）：`gateway/pairing.py` 在 v0.13 中新增了 lockout 修正（`fix(pairing): enforce lockout on approve_code`），安全性有改善，但 UX 文件仍缺失。
+- 安全性波：redaction 預設開啟（`agent/redact.py`）、Discord role-allowlist guild-scoped、WhatsApp 預設拒絕陌生人 — 這 3 個 P0 安全問題已在 v0.13 關閉。
+
+<!-- 更新結束 -->
