@@ -1,6 +1,6 @@
 # API_SURFACE — Part 1/2：CLI、斜線指令、Python Library API
 
-> 版本：0.12.0 | 維護者：Nous Research | 授權：MIT
+> 版本：0.13.0 | 維護者：Nous Research | 授權：MIT
 > 接續：[API_SURFACE_part2.md](./API_SURFACE_part2.md)（Gateway API、工具 API、Authentication、Error Handling）
 
 ---
@@ -206,7 +206,11 @@ agent = AIAgent(
     request_overrides: Dict[str, Any] = None,
     prefill_messages: List[Dict[str, Any]] = None,
     fallback_model: Dict[str, Any] = None,
+    # [v0.13] Checkpoints v2
     checkpoints_enabled: bool = False,
+    checkpoint_max_snapshots: int = 20,
+    checkpoint_max_total_size_mb: int = 500,
+    checkpoint_max_file_size_mb: int = 10,
 )
 ```
 

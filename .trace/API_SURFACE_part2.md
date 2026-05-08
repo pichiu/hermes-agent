@@ -1,6 +1,6 @@
 # API_SURFACE — Part 2/2：Gateway API、工具 API、Authentication、Error Handling
 
-> 版本：0.12.0 | 維護者：Nous Research | 授權：MIT
+> 版本：0.13.0 | 維護者：Nous Research | 授權：MIT
 > 接續自：[API_SURFACE_part1.md](./API_SURFACE_part1.md)（CLI、斜線指令、Python Library API）
 
 ---
@@ -60,7 +60,18 @@ Content-Type: application/json
 X-Hermes-Session-Id: <session-id>
 ```
 
-### 4.3 SSE Keepalive
+### 4.3 X-Hermes-Session-Key（v0.13 新增）
+
+用於給 memory provider 提供穩定的 session 識別碼（有別於會話 ID，這是跨 request 的穩定 key）：
+
+```http
+POST /v1/chat/completions
+Authorization: Bearer <API_SERVER_KEY>
+X-Hermes-Session-Key: <stable-memory-key>
+Content-Type: application/json
+```
+
+### 4.4 SSE Keepalive
 
 - Chat Completions SSE keepalive 間隔：30 秒（`CHAT_COMPLETIONS_SSE_KEEPALIVE_SECONDS`）
 - 最大 POST body：1 MB（`MAX_REQUEST_BYTES`）
