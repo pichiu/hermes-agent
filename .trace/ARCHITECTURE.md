@@ -1,7 +1,7 @@
 # Hermes Agent — 系統架構文件
 
-> 版本：0.12.0 ｜ 維護者：Nous Research ｜ 授權：MIT
-> 文件生成日期：2026-05-05
+> 版本：0.13.0 ｜ 維護者：Nous Research ｜ 授權：MIT
+> 文件生成日期：2026-05-05 ｜ 增量更新：2026-05-08（v0.12→v0.13）
 
 ---
 
@@ -54,9 +54,10 @@ graph TB
     subgraph Extensions["擴充點（Extensions）"]
         MEM_P["Memory Providers\nplugins/memory/"]
         CTX_E["Context Engines\nplugins/context_engine/"]
-        PLATFORMS["Platform Adapters\ngateway/platforms/"]
+        PLATFORMS["Platform Adapters\ngateway/platforms/（built-in）\nplugins/platforms/（plugin）"]
         SKILLS["Skills 系統\nskills/, optional-skills/"]
         MCP_SRV["MCP 伺服器\n外部工具整合"]
+        PROVIDERS["Provider Profiles\nplugins/model-providers/\nproviders/base.py"]
     end
 
     subgraph LLM["LLM 提供商"]
@@ -64,6 +65,7 @@ graph TB
         ANT["Anthropic 原生 API"]
         BED["AWS Bedrock"]
         GEM["Google Gemini"]
+        MORE["29 個插件化提供商\n（DeepSeek/Ollama/xAI/...）"]
     end
 
     CLI --> AGENT
@@ -87,8 +89,10 @@ graph TB
     MCP_T --> MCP_SRV
 
     ADAPTERS --> OAI & ANT & BED & GEM
+    PROVIDERS --> MORE
     CRED --> OAI
     ERR --> ADAPTERS
+    PROVIDERS -.->|宣告式描述| ADAPTERS
 ```
 
 ---
@@ -104,7 +108,7 @@ graph TB
 | **ToolRegistry** | 工具自動發現與分派（Self-registering pattern） | `tools/registry.py:ToolRegistry` | `model_tools.py` | 所有 `tools/*.py` |
 | **SessionDB** | SQLite 會話儲存，FTS5 全文搜尋歷史對話 | `hermes_state.py:SessionDB` | `AIAgent`, `HermesCLI` | SQLite 檔案 |
 | **GatewayRunner** | 訊息閘道主控制器，非同步多平台協調 | `gateway/run.py:GatewayRunner` | `hermes_cli/main.py` | `Platform Adapters`, `AIAgent` |
-| **Platform Adapters** | 各平台訊息適配器（20+ 平台） | `gateway/platforms/*.py` | `GatewayRunner` | 外部平台 API |
+| **Platform Adapters** | 各平台訊息適配器（20 個平台，含 1 個純插件型） | `gateway/platforms/*.py`（19 built-in）<br>`plugins/platforms/google_chat/`（1 plugin） | `GatewayRunner` | 外部平台 API |
 | **MemoryManager** | 記憶體多插件協調，統一 MemoryProvider 介面 | `agent/memory_manager.py` | `AIAgent` | `MemoryProvider` 實作 |
 | **ContextCompressor** | 對話上下文壓縮，防止超過 context window | `agent/context_compressor.py` | `AIAgent` | 輔助 `AIAgent` |
 | **Curator** | 定期技能維護，生命週期管理（active/stale/archived） | `agent/curator.py` | `AIAgent`（閒置觸發） | Skills 目錄 |
@@ -112,6 +116,10 @@ graph TB
 | **PromptBuilder** | 系統提示組裝，7 層次結構，建構後凍結 | `agent/prompt_builder.py` | `AIAgent` | `SOUL.md`, `AGENTS.md` |
 | **CredentialPool** | 多 API key 輪換，提升 RPM 上限 | `agent/credential_pool.py` | `AIAgent` | LLM 提供商 |
 | **ErrorClassifier** | API 錯誤分類（rate_limit/overload/auth/context）與 failover | `agent/error_classifier.py` | `AIAgent` | Fallback 提供商 |
+| **ProviderProfile** | 宣告式 LLM 提供商描述（auth/endpoint/quirks），ABC | `providers/base.py`<br>`plugins/model-providers/<name>/` | `AIAgent`（transport 層讀取） | LLM 提供商 API |
+| **CheckpointManager** | 對話快照剪枝、磁碟配額保護 | `tools/checkpoint_manager.py`<br>`hermes_cli/checkpoints.py` | `AIAgent.__init__` | 本地磁碟 |
+
+<!-- 更新於 2026-05-08, v0.12→v0.13 -->
 
 ---
 
@@ -130,15 +138,18 @@ graph TB
 │  Layer 2：Agent 內部模組層（Agent Internals）             │
 │  agent/memory_manager · prompt_builder · context_comp    │
 │  agent/error_classifier · credential_pool · curator      │
+│  agent/think_scrubber · agent/i18n                       │
 │  ── 策略邏輯，可替換實作 ──                               │
 ├──────────────────────────────────────────────────────────┤
 │  Layer 3：工具層（Tool Layer）                            │
 │  tools/registry.py + tools/*.py                          │
+│  tools/checkpoint_manager.py                             │
 │  ── 副作用執行（終端機/檔案/網頁/記憶體/子代理）──         │
 ├──────────────────────────────────────────────────────────┤
 │  Layer 4：基礎設施層（Infrastructure）                   │
 │  hermes_state.py · hermes_constants.py · hermes_logging  │
-│  ── 狀態持久化、路徑管理、日誌 ──                         │
+│  providers/ · locales/                                   │
+│  ── 狀態持久化、路徑管理、日誌、Provider 宣告 ──          │
 ├──────────────────────────────────────────────────────────┤
 │  Layer 5：外部依賴層（External）                          │
 │  LLM API · SQLite · 訊息平台 API · MCP 伺服器            │
@@ -155,6 +166,7 @@ graph TB
 **檔案依賴鏈**（摘自 AGENTS.md）：
 ```
 tools/registry.py → tools/*.py → model_tools.py → run_agent.py / cli.py / batch_runner.py
+providers/base.py → plugins/model-providers/<name>/__init__.py → providers/__init__._discover_providers()
 ```
 
 ---
@@ -269,7 +281,7 @@ sequenceDiagram
 
     loop Agent Loop（max_iterations=90）
         Agent->>LLM: chat.completions.create(messages, tools)
-        LLM-->>Agent: response
+        LLM-->>Agent: response（StreamingThinkScrubber 剝除 think tag）
 
         alt response.tool_calls 存在
             Agent->>MT: handle_function_call(tool_name, args)
@@ -277,7 +289,9 @@ sequenceDiagram
             Reg-->>MT: tool_result
             MT-->>Agent: tool_result
             Agent->>Agent: 追加 tool_result 到 messages
+            Note over Agent: write_file/patch 後觸發<br/>CheckpointManager 快照
         else 純文字回應
+            Agent->>Agent: invoke_hook(transform_llm_output)
             Agent-->>CLI: final_response
         end
     end
@@ -311,7 +325,7 @@ sequenceDiagram
     Runner->>Runner: pre_gateway_dispatch 鉤子
 
     alt session_key 已存在
-        Runner->>Session: 取得現有 Session
+        Runner->>Session: 取得現有 Session（Gateway bounce 後自動恢復）
     else 新 Session
         Runner->>Session: 建立 GatewaySession
         Session->>Agent: AIAgent(platform="telegram", session_id=...)
@@ -339,10 +353,19 @@ sequenceDiagram
 | `run_agent.py` | 核心引擎層 | 系統中樞，所有路徑匯聚點 |
 | `cli.py` | 進入點層 | 互動式 CLI 協調，約 11k LOC |
 | `agent/` | Agent 內部模組層 | 策略邏輯，可替換實作 |
+| `agent/think_scrubber.py` | Agent 內部模組層 | Streaming `<think>` tag 剝除器 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `agent/i18n.py` | Agent 內部模組層 | i18n 層，涵蓋 user-facing static messages <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
 | `tools/` | 工具層 | 副作用執行，含 6 種終端機後端 |
+| `tools/checkpoint_manager.py` | 工具層 | Checkpoints v2 快照/剪枝/磁碟配額 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
 | `hermes_cli/` | 進入點層 | CLI 子指令、插件管理、佈景主題 |
-| `gateway/` | 進入點層（非同步） | 20+ 訊息平台閘道 |
-| `plugins/` | 擴充點 | 記憶/上下文引擎/其他插件 |
+| `hermes_cli/checkpoints.py` | 進入點層 | Checkpoint CLI 子指令 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `gateway/` | 進入點層（非同步） | 20 個訊息平台閘道（19 built-in + 1 plugin） |
+| `gateway/platform_registry.py` | 進入點層（非同步） | 插件型平台自我注冊中心 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `plugins/` | 擴充點 | 記憶/上下文引擎/平台插件/model-providers |
+| `plugins/model-providers/` | 擴充點 | 29 個 LLM 提供商插件 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `plugins/platforms/google_chat/` | 擴充點 | Google Chat 純插件平台適配器 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `providers/` | 基礎設施層 | ProviderProfile 宣告式 ABC 及 Discovery 系統 <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `locales/` | 基礎設施層 | i18n 資源（8 個 locale：en/zh/ja/de/es/fr/tr/uk） <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
 | `skills/` | 擴充點 | 捆綁技能（Markdown 格式指令） |
 | `optional-skills/` | 擴充點 | 非預設啟用的重型技能 |
 | `hermes_state.py` | 基礎設施層 | SQLite + FTS5 會話持久化 |
@@ -352,6 +375,106 @@ sequenceDiagram
 | `cron/` | 擴充點 | 排程任務（croniter 語法） |
 | `environments/` | 研究工具層 | RL 訓練環境（Atropos 整合） |
 | `batch_runner.py` | 研究工具層 | 平行批次處理，輸出 ShareGPT 軌跡 |
+
+---
+
+## 8. 擴充點（Extension Points）
+
+### 8.1 Plugin Lifecycle Hooks
+
+PluginManager 在 `hermes_cli/plugins.py` 中定義 `VALID_HOOKS`，插件透過 `PluginContext.register_hook()` 於 import 時訂閱。`AIAgent` 在對應時機呼叫 `invoke_hook(name, **kwargs)`。
+
+| Hook 名稱 | 觸發時機 | 回傳值語意 |
+|-----------|---------|-----------|
+| `pre_tool_call` | 工具執行前 | `{"action": "block", ...}` 可阻止執行 |
+| `post_tool_call` | 工具執行後 | 觀察者；回傳值忽略 |
+| `transform_terminal_output` | 終端機輸出後 | 字串替換 |
+| `transform_tool_result` | 任何工具結果後 | 字串替換 |
+| `transform_llm_output` | LLM 輸出進入對話**前** | 第一個非 None 字串勝出；用於 context window reducer、content filter <!-- 更新於 2026-05-08, v0.12→v0.13 --> |
+| `pre_llm_call` | 送出 API 請求前 | 觀察者 |
+| `post_llm_call` | 收到 API 回應後 | 觀察者 |
+| `pre_api_request` | HTTP 層請求前 | 觀察者 |
+| `post_api_request` | HTTP 層回應後 | 觀察者 |
+| `on_session_start` | 會話建立時 | 觀察者 |
+| `on_session_end` / `on_session_finalize` | 會話結束 | 觀察者 |
+| `on_session_reset` | 對話重置時 | 觀察者 |
+| `subagent_stop` | 子代理停止時 | 觀察者 |
+| `pre_gateway_dispatch` | Gateway 收到訊息後、auth 前 | `{"action": "skip"/"rewrite"/"allow", ...}` |
+| `pre_approval_request` | 危險指令等待確認前 | 觀察者 |
+| `post_approval_response` | 用戶確認後 | 觀察者 |
+
+### 8.2 ProviderProfile 插件系統
+
+<!-- 更新於 2026-05-08, v0.12→v0.13 -->
+
+v0.13.0 引入宣告式 `ProviderProfile` ABC（`providers/base.py`），將「描述提供商」與「建構 client」的職責分離。
+
+**核心概念：**
+- `ProviderProfile` 是純宣告（`@dataclass`），描述 auth 方式、endpoint URL、request quirks（如 `fixed_temperature`、`default_headers`）
+- 不擁有 `httpx.Client` 或 credential rotation，這些仍在 `AIAgent` 的 transport 層
+- 子類別可覆寫 `prepare_messages()`、`build_extra_body()`、`build_api_kwargs_extras()`、`fetch_models()` 實現提供商特有行為
+
+**Discovery 掃描順序（`providers/__init__._discover_providers()`，懶惰執行）：**
+```
+1. bundled:  <repo>/plugins/model-providers/<name>/__init__.py
+2. user:     $HERMES_HOME/plugins/model-providers/<name>/__init__.py
+3. legacy:   providers/<name>.py（pkgutil 掃描，向下相容）
+```
+後序 registration 覆蓋先序（last-writer-wins），使用者插件可覆蓋 bundled 插件。
+
+**與 PluginManager 的邊界：**
+- PluginManager 掃描到 `kind: model-provider` 的 manifest 時，**記錄但不 import**（`hermes_cli/plugins.py:724`），避免雙重實例化
+- Provider 的實際 import 由 `providers.__init__._discover_providers()` 單一管轄
+
+**目前捆綁的 29 個提供商插件（`plugins/model-providers/`）：**
+`ai-gateway` / `alibaba` / `alibaba-coding-plan` / `anthropic` / `arcee` / `azure-foundry` / `bedrock` / `copilot` / `copilot-acp` / `custom` / `deepseek` / `gemini` / `gmi` / `huggingface` / `kilocode` / `kimi-coding` / `minimax` / `nous` / `nvidia` / `ollama-cloud` / `openai-codex` / `opencode-zen` / `openrouter` / `qwen-oauth` / `stepfun` / `xai` / `xiaomi` / `zai`
+
+### 8.3 Platform Adapters（訊息平台）
+
+v0.13.0 新增 `gateway/platform_registry.py`，允許插件型平台透過 `PlatformEntry` 自我注冊，不再需要修改 Gateway 的 `if/elif` 鏈。
+
+**20 個訊息平台（v0.13.0）：**
+
+| 來源 | 平台 |
+|------|------|
+| built-in（19 個，`gateway/platforms/`） | Telegram, Discord, Slack, WeChat（weixin）, WeCom, WhatsApp, Feishu/Lark, DingTalk, Signal, Matrix, Mattermost, SMS, Email, BlueBubbles, Home Assistant, QQBot, Webhook, API Server, Yuanbao |
+| plugin（1 個，`plugins/platforms/`） | **Google Chat**（Pub/Sub pull + REST，無需公開 URL）|
+
+**`PlatformEntry` 新 hook（v0.13.0）：**
+- `env_enablement_fn`：讀取環境變數並回傳 `PlatformConfig.extra` 字典，用於免手動設定的自動啟用
+- `cron_deliver_env_var`：指定 cron 任務遞送時使用的環境變數名稱
+
+IRC 和 Teams 已遷移至 `env_enablement_fn` + `cron_deliver_env_var` 機制。
+
+---
+
+## 9. v0.13.0 其他新功能摘要
+
+<!-- 更新於 2026-05-08, v0.12→v0.13 -->
+
+### Checkpoints v2
+
+- 檔案：`hermes_cli/checkpoints.py`、`tools/checkpoint_manager.py`
+- `AIAgent.__init__` 新增 4 個參數：`checkpoints_enabled`、`checkpoint_max_snapshots`、`checkpoint_max_total_size_mb`、`checkpoint_max_file_size_mb`
+- 觸發點：`run_agent.py:9818`，於 `write_file` / `patch` 工具執行後自動建立快照
+- 支援真實剪枝（超過 `max_snapshots` 時刪除最舊的）與磁碟配額保護
+
+### StreamingThinkScrubber
+
+- 檔案：`agent/think_scrubber.py`
+- 即時剝除 streaming 輸出中的 `<think>...</think>` 標籤（用於 DeepSeek、Qwen 等 chain-of-thought 模型）
+- 整合於 `run_agent.py` L131、L1319、L6816、L6912
+
+### Sessions 重啟後自動恢復
+
+- Gateway bounce、`/update` 重啟、原始碼熱重載後，現有對話自動 resume
+- 無需用戶重新建立 session
+
+### i18n 層
+
+- 目錄：`locales/`（8 個 locale：en/zh/ja/de/es/fr/tr/uk）、`agent/i18n.py`
+- **範圍限制**：僅翻譯 user-facing static messages（approval prompt、gateway slash command 回覆）
+- Agent 生成的輸出、log、tool output 維持英文，不進入 i18n 管線
 
 ---
 
