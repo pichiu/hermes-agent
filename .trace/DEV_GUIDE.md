@@ -178,7 +178,7 @@ workers 數量超過 4 會出現 CI 從未見過的 ordering flake。
 
 ### 3.4 測試架構
 
-- 測試套件位於 `tests/`，約 15k 個測試分佈於 700+ 個檔案
+- 測試套件位於 `tests/`，約 17k 個測試分佈於 900+ 個檔案（v0.13 起）
 - `tests/conftest.py` 的 autouse fixture `_isolate_hermes_home` 將 `HERMES_HOME` 重導向至 temp dir，**測試中禁止寫入真實 `~/.hermes/`**
 - CI 在 GitHub Actions 的 `ubuntu-latest` 上執行，超時 20 分鐘（見 `.github/workflows/tests.yml`）
 - integration tests 與 e2e tests 分別在獨立的 CI job 中執行
@@ -294,7 +294,11 @@ Merge 後用 `git diff HEAD~1..HEAD` 驗證，非預期的刪除是警訊。
 
 未曾上線的閒置程式碼是有原因的。接入現有 code path 前，必須用真實 import（非 mock）、針對暫時的 `HERMES_HOME` 做完整的 E2E 驗證。
 
-### 5.9 Tests 禁止寫入 `~/.hermes/`
+### 5.9 [v0.13] 在 `toolsets.py` 加入工具是必要步驟，不可跳過
+
+`tools/*.py` 中有 top-level `registry.register()` 呼叫的檔案會被 auto-discovery import，但工具只有在 `toolsets.py` 的某個 toolset 中列名時，才會真正暴露給 agent。`_HERMES_CORE_TOOLS` 不是 dead code — 它是所有平台 base toolset 的預設 bundle。忘記加 toolset 定義，agent 就看不到該工具。
+
+### 5.10 Tests 禁止寫入 `~/.hermes/`
 
 `tests/conftest.py` 的 `_isolate_hermes_home` autouse fixture 已重導向 `HERMES_HOME` 至 temp dir。測試程式碼禁止 hardcode `~/.hermes/` 路徑。
 
@@ -497,15 +501,45 @@ def setup(ctx):
 
 啟用方式：設定 `HERMES_ENABLE_PROJECT_PLUGINS=1` 後，`./.hermes/plugins/` 下的插件也會被發現。
 
-### 8.5 新增技能（Skill）
+### 8.5 新增 LLM 提供商 Plugin（v0.13 新增）
+
+<!-- 更新於 2026-05-08, v0.12→v0.13 -->
+
+不需要修改核心。在 `plugins/model-providers/<name>/` 建立：
+
+```
+plugins/model-providers/my-provider/
+  ├── plugin.yaml    # kind: model-provider, name, version, description
+  └── __init__.py    # 呼叫 providers.register_provider(ProviderProfile(...))
+```
+
+```python
+# __init__.py
+from providers import register_provider
+from providers.base import ProviderProfile
+
+register_provider(ProviderProfile(
+    name="my-provider",
+    api_mode="chat_completions",
+    base_url="https://api.myprovider.com/v1",
+    # ... 其他 auth/endpoint quirks
+))
+```
+
+**Discovery 掃描順序**：bundled → `$HERMES_HOME/plugins/model-providers/` → legacy `providers/<name>.py`。同名的 user plugin 會覆蓋 bundled（last-writer-wins）。
+**注意**：ProviderProfile 由 `providers._discover_providers()` 懶惰載入，**不經過** PluginManager（避免雙重實例化）。
+
+完整指引：`website/docs/developer-guide/model-provider-plugin.md`
+
+### 8.6 新增技能（Skill）
 
 技能為 Markdown 檔案，放入 `skills/<category>/`（廣泛適用）或 `optional-skills/<category>/`（重型依賴或付費服務）。每個技能需有 `SKILL.md` frontmatter，標準欄位包含 `name`、`description`、`version`、`platforms`（OS gating）、`metadata.hermes.tags`、`metadata.hermes.category`、`metadata.hermes.config`（所需的 config.yaml 設定）。
 
-### 8.6 新增閘道平台（Gateway Platform）
+### 8.7 新增閘道平台（Gateway Platform）
 
 詳見 `gateway/platforms/ADDING_A_PLATFORM.md`。重點步驟：
 
-1. 在 `gateway/platforms/` 建立 adapter 類別，繼承 `base.py` base adapter
+1. 在 `gateway/platforms/`（built-in）或 `plugins/platforms/<name>/`（插件型，v0.13 推薦）建立 adapter 類別，繼承 `base.py` base adapter
 2. 在 `gateway/platform_registry.py` 登錄新 platform
 3. 在 `gateway/config.py` 加入設定解析
 4. 使用 `acquire_scoped_lock()` / `release_scoped_lock()` 保護 token（避免多 profile 衝突）
