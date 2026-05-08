@@ -2,7 +2,7 @@
 
 ## 一句話總結
 
-Hermes Agent 是 Nous Research 開發的自我進化 AI agent，以 Python 實作，透過學習迴路自動創建技能、改善記憶、跨越 18+ 訊息平台（Telegram、Discord、WhatsApp 等）部署，並同時作為 RL 訓練資料生成平台。
+Hermes Agent 是 Nous Research 開發的自我進化 AI agent，以 Python 實作，透過學習迴路自動創建技能、改善記憶、跨越 **20 個**訊息平台（Telegram、Discord、WhatsApp、Google Chat 等）部署，並同時作為 RL 訓練資料生成平台。（v0.13.0 "The Tenacity Release"，2026-05-07）
 
 ---
 
@@ -32,11 +32,12 @@ Hermes Agent 是 Nous Research 開發的自我進化 AI agent，以 Python 實�
 | 記憶 | honcho-ai | >=2.0.1 | 辯證用戶建模 |
 | MCP | mcp | >=1.2.0 | Model Context Protocol |
 | RL | atroposlib | git | Atropos RL 環境 |
-| 測試 | pytest | >=9.0.2 | 測試框架（~15k 測試）|
+| 測試 | pytest | >=9.0.2 | 測試框架（v0.13 起 ~17k 測試）|
 | 容器化 | Docker | - | 生產部署 |
-| CI/CD | GitHub Actions | - | 10 個 workflow |
+| CI/CD | GitHub Actions | - | 11 個 workflow（新增 lint.yml）|
 | 建置 | setuptools | >=61.0 | Python 套件建置 |
 | Nix | flake.nix | - | 可重現環境 |
+| i18n | PyYAML | stdlib | locales/*.yaml 靜態訊息翻譯（v0.13 新增，8 語言）|
 
 ---
 
@@ -141,3 +142,8 @@ hermes logs --session <id>      # 特定會話日誌
 | **AGENTS.md** | 代碼倉庫的 AI 助理開發指南（Codex/Cursor 慣例）|
 | **Dialectic reasoning** | Honcho 的辯證推理：從對話推導用戶深層模型 |
 | **agentskills.io** | 開放技能市集標準，Hermes 相容格式 |
+| **ProviderProfile** | [v0.13] `providers/base.py` 宣告式 inference provider 描述，取代散落在 agent 各處的布林旗標 |
+| **model-provider plugin** | [v0.13] `plugins/model-providers/<name>/` 格式的 LLM 提供商插件，可由使用者覆蓋內建實作 |
+| **Checkpoint** | [v0.13] Checkpoints v2：會話狀態快照，由 `tools/checkpoint_manager.py` 管理，含磁碟配額保護 |
+| **/goal** | [v0.13] Ralph loop 一等公民實作：鎖定 agent 持續追蹤目標，跨越多輪對話不偏離 |
+| **StreamingThinkScrubber** | [v0.13] `agent/think_scrubber.py`：即時剝除 `<think>` tag 串流輸出，在 LLM 回應到達前過濾 |
